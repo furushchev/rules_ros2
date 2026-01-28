@@ -78,10 +78,15 @@ def _ros2_cpp_exec(target, name, ros2_package_name, set_up_ament, idl_deps, **kw
     launcher_target_kwargs, binary_kwargs = split_kwargs(**kwargs)
     target_impl = name + "_impl"
     cc_tags = launcher_target_kwargs.get("tags", []) + ["manual"]
+
+    # Extract data for both the binary and ament setup
+    ament_data = binary_kwargs.get("data", [])
+
     _ros2_cc_target(cc_binary, "cpp", target_impl, ros2_package_name, tags = cc_tags, **binary_kwargs)
 
     launcher = "{}_launch".format(name)
     ament_setup_deps = [target_impl] if set_up_ament else None
+    package_name = ros2_package_name or name
     sh_launcher(
         launcher,
         ament_setup_deps = ament_setup_deps,
@@ -92,6 +97,8 @@ def _ros2_cpp_exec(target, name, ros2_package_name, set_up_ament, idl_deps, **kw
         tags = ["manual"],
         data = [target_impl],
         idl_deps = idl_deps,
+        ament_package_name = package_name,
+        ament_data = ament_data,
         testonly = is_test,
     )
 

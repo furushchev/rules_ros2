@@ -120,6 +120,37 @@ def _ros2_ament_setup_rule_impl(ctx):
     prefix_path = ctx.attr.name
     outputs = []
     registered_packages = []
+
+    if ctx.attr.package_name:
+        outputs.append(_write_package_xml(ctx, prefix_path, ctx.attr.package_name))
+        registered_packages.append(ctx.attr.package_name)
+
+        # Include data files in share directory if provided
+        for data_file in ctx.files.data:
+            # Create symlink in share/package_name/ maintaining directory structure
+            # For example: config/foo.json5 -> share/package_name/config/foo.json5
+            # Transform Bazel short_path to package-relative path
+            # by finding package_name in path components
+            relative_path = data_file.short_path
+            parts = relative_path.split("/")
+
+            # Find package_name in the path components
+            # If not found, use the path as-is
+            if ctx.attr.package_name in parts:
+                # Return everything after package_name
+                relative_parts = parts[parts.index(ctx.attr.package_name) + 1:]
+                if relative_parts:
+                    relative_path = paths.join(*relative_parts)
+
+            dest_file = ctx.actions.declare_file(
+                paths.join(prefix_path, "share", ctx.attr.package_name, relative_path),
+            )
+            ctx.actions.symlink(
+                output = dest_file,
+                target_file = data_file,
+            )
+            outputs.append(dest_file)
+
     for plugin in plugins:
         plugin_target_name = plugin.target_name
         types_to_bases_and_names = plugin.types_to_bases_and_names
@@ -253,6 +284,8 @@ ros2_ament_setup = rule(
             ],
             providers = [Ros2InterfaceInfo],
         ),
+        "package_name": attr.string(),
+        "data": attr.label_list(allow_files = True),
     },
     implementation = _ros2_ament_setup_rule_impl,
 )
@@ -385,7 +418,7 @@ sh_launcher_rule = rule(
     toolchains = [SH_TOOLCHAIN],
 )
 
-def sh_launcher(name, ament_setup_deps = None, idl_deps = None, **kwargs):
+def sh_launcher(name, ament_setup_deps = None, idl_deps = None, ament_package_name = None, ament_data = None, **kwargs):
     testonly = kwargs.get("testonly", False)
     ament_setup = None
     if ament_setup_deps != None:
@@ -394,6 +427,8 @@ def sh_launcher(name, ament_setup_deps = None, idl_deps = None, **kwargs):
             name = ament_setup,
             deps = ament_setup_deps,
             idl_deps = idl_deps,
+            package_name = ament_package_name,
+            data = ament_data or [],
             tags = ["manual"],
             testonly = testonly,
         )
